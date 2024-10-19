@@ -1,5 +1,6 @@
 import 'package:fabric_defect_detector/utils/settings_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -38,24 +39,38 @@ class _HomeState extends State<Home> {
         title: const Text('Setup device IP'),
       ),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('Enter the IP address of the device:'),
-            TextField(
-                controller: _textController,
-                decoration: const InputDecoration(
-                  hintText: 'Device IP',
-                )),
-            ElevatedButton(
-              onPressed: () {
-                _settings["device_ip"] = _textController.text;
-                _settingsPreferences.setSettings(_settings);
-                Navigator.pushReplacementNamed(context, '/process_stream');
-              },
-              child: const Text("Connect to device"),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.only(left: 30, right: 30),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              const Text('Enter the IP address of the device:'),
+              const SizedBox(height: 20),
+              TextField(
+                  controller: _textController,
+                  decoration: const InputDecoration(
+                    hintText: 'Device IP',
+                  )),
+              const SizedBox(height: 60),
+              ElevatedButton(
+                onPressed: () {
+                  _settings["device_ip"] = _textController.text;
+                  _settingsPreferences.setSettings(_settings);
+                  Navigator.pushReplacementNamed(context, '/process_stream');
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4.0),
+                  ),
+                ),
+                child: const Text(
+                  "Connect to device",
+                  style: TextStyle(fontSize: 12, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

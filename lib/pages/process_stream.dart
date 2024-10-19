@@ -16,7 +16,7 @@ class _ProcessStream extends State<ProcessStream> {
   final ValueNotifier<Uint8List?> _imageDataNotifier =
       ValueNotifier<Uint8List?>(null);
   Timer? retryTimer;
-  SettingsPreferences _settingsPreferences = SettingsPreferences();
+  final SettingsPreferences _settingsPreferences = SettingsPreferences();
 
   @override
   void initState() {
@@ -26,7 +26,7 @@ class _ProcessStream extends State<ProcessStream> {
 
   void connectWebSocket() async {
     try {
-      final settings = await _settingsPreferences.getSettings();
+      Map<String, dynamic> settings = await _settingsPreferences.getSettings();
       _channel = WebSocketChannel.connect(
         Uri.parse('ws://${settings["device_ip"]}'),
       );
