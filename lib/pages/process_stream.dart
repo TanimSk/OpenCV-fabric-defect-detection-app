@@ -82,6 +82,13 @@ class _ProcessStream extends State<ProcessStream> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('WebSocket Image Stream'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.pushReplacementNamed(
+                context, '/home'); // Navigate back when the button is pressed
+          },
+        ),
       ),
       body: Center(
         child: Column(

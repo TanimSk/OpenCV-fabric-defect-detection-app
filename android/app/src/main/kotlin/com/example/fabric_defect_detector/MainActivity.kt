@@ -27,9 +27,11 @@ import java.io.ByteArrayOutputStream
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "opencv_processing"
     private var lowerColor = Scalar(30.0, 100.0, 100.0)
-    private var upperColor = Scalar(90.0, 255.0, 255.0)
+    private var upperColor = Scalar( 106.0, 140.0, 171.0)
+    private var isCalibrated: Boolean = false
     private lateinit var mediaPlayer: MediaPlayer
     private lateinit var mat:Mat
+
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -110,11 +112,11 @@ class MainActivity: FlutterActivity() {
         }
 
         // Convert the image to HSV
-//        val hsvImage = Mat()
-//        Imgproc.cvtColor(image, hsvImage, Imgproc.COLOR_BGR2HSV)
+        val hsvImage = Mat()
+        Imgproc.cvtColor(image, hsvImage, Imgproc.COLOR_BGR2HSV)
 
         // Extract the HSV values of the center pixel
-        val centerPixel = image[centerY, centerX]
+        val centerPixel = hsvImage[centerY, centerX]
         if (centerPixel == null || centerPixel.size < 3) {
             Log.e("OpenCV", "Failed to get pixel value at center.")
             throw IllegalArgumentException("Could not retrieve pixel data at center.")
@@ -135,6 +137,7 @@ class MainActivity: FlutterActivity() {
             if (centerPixel[2] - vValue >= 0) centerPixel[2] - vValue else 0.0
         )
 
+        isCalibrated = true
         return Pair(lowerColor, upperColor)
     }
 
@@ -148,6 +151,10 @@ class MainActivity: FlutterActivity() {
             if (mat.empty()) {
                 Log.e("OpenCV", "Decoded Mat is empty")
                 throw IllegalArgumentException("Failed to decode byte array to Mat")
+            }
+
+            if (!isCalibrated){
+                return matToByteArray(mat)
             }
 
             // Step 1: Convert the image to HSV
@@ -190,12 +197,12 @@ class MainActivity: FlutterActivity() {
             Imgproc.findContours(edges, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
 
             // Step 10: Draw the largest contour
-            if (contours.isNotEmpty()) {
-                val largestContour = contours.maxByOrNull { Imgproc.contourArea(it) }
-                if (largestContour != null) {
-                    Imgproc.drawContours(edges, listOf(largestContour), -1, Scalar(0.0, 0.0, 0.0), 30)
-                }
-            }
+//            if (contours.isNotEmpty()) {
+//                val largestContour = contours.maxByOrNull { Imgproc.contourArea(it) }
+//                if (largestContour != null) {
+//                    Imgproc.drawContours(edges, listOf(largestContour), -1, Scalar(0.0, 0.0, 0.0), 30)
+//                }
+//            }
 
             // Step 11: Internal edge detection
             val internalEdges = Mat()
@@ -219,18 +226,31 @@ class MainActivity: FlutterActivity() {
                 }
             }
 
-            // Convert the processed Mat back to Bitmap for returning
-            val processedBitmap = Bitmap.createBitmap(mat.cols(), mat.rows(), Bitmap.Config.ARGB_8888)
-            Utils.matToBitmap(mat, processedBitmap)
-            val stream = ByteArrayOutputStream()
-            processedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+            return matToByteArray(mat)
 
-            return stream.toByteArray()
         } catch (e: Exception) {
             Log.e("OpenCV", "Exception occurred during conversion: ${e.message}")
             throw e // Re-throw to handle it higher up if needed
         }
     }
+
+    fun matToByteArray(mat: Mat): ByteArray {
+        // Create a Bitmap from the Mat
+        val processedBitmap = Bitmap.createBitmap(mat.cols(), mat.rows(), Bitmap.Config.ARGB_8888)
+
+        // Convert the Mat to Bitmap
+        Utils.matToBitmap(mat, processedBitmap)
+
+        // Prepare an output stream to hold the compressed image data
+        val stream = ByteArrayOutputStream()
+
+        // Compress the Bitmap to JPEG format with 100% quality
+        processedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+
+        // Return the byte array from the stream
+        return stream.toByteArray()
+    }
+
 
     // Function to play the beep sound
     private fun playBeepSound() {
