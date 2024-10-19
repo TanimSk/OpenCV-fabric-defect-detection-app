@@ -17,6 +17,8 @@ class _ProcessStream extends State<ProcessStream> {
       ValueNotifier<Uint8List?>(null);
   Timer? retryTimer;
   final SettingsPreferences _settingsPreferences = SettingsPreferences();
+  String lowerColor = "Not Calibrated";
+  String upperColor = "Not Calibrated";
 
   @override
   void initState() {
@@ -85,6 +87,11 @@ class _ProcessStream extends State<ProcessStream> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            Text(
+              "Lower Color: $lowerColor\nUpper Color: $upperColor",
+              style: const TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 30),
             ValueListenableBuilder<Uint8List?>(
               valueListenable: _imageDataNotifier,
               builder: (context, imageData, child) {
@@ -104,11 +111,10 @@ class _ProcessStream extends State<ProcessStream> {
               onPressed: () async {
                 List<dynamic> colorRange =
                     await platform.invokeMethod('calibrateColor');
-                var lowerColor = colorRange[0];
-                var upperColor = colorRange[1];
-
-                print("Lower Color: $lowerColor");
-                print("Upper Color: $upperColor");
+                setState(() {
+                  lowerColor = colorRange[0];
+                  upperColor = colorRange[1];
+                });
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.black,

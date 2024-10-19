@@ -1,5 +1,7 @@
 package com.example.fabric_defect_detector
 
+import android.R.attr.x
+import android.R.attr.y
 import android.graphics.Bitmap
 import android.media.MediaPlayer
 import android.os.Bundle
@@ -14,49 +16,20 @@ import org.opencv.core.Mat
 import org.opencv.core.MatOfByte
 import org.opencv.core.MatOfPoint
 import org.opencv.core.Point
+import org.opencv.core.Rect
 import org.opencv.core.Scalar
+import org.opencv.core.Size
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import java.io.ByteArrayOutputStream
+
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "opencv_processing"
     private var lowerColor = Scalar(30.0, 100.0, 100.0)
     private var upperColor = Scalar(90.0, 255.0, 255.0)
-    private var matImage = Mat()
-
-
-
-    private fun getHsvRange(image: Mat, hValue: Int, sValue: Int, vValue: Int): Pair<Scalar, Scalar> {
-        val height = image.rows()
-        val width = image.cols()
-
-        // Get the pixel at the center of the image
-        val centerPixel = Mat(1, 1, image.type())
-        Core.extractChannel(image.submat(height / 2, height / 2 + 1, width / 2, width / 2 + 1), centerPixel, 0)
-
-        // Convert the pixel to HSV color space
-        val hsvPixel = Mat(1, 1, image.type())
-        Imgproc.cvtColor(centerPixel, hsvPixel, Imgproc.COLOR_BGR2HSV)
-
-        val hsvValues = hsvPixel.get(0, 0)
-
-        // Create upper and lower color bounds using hValue, sValue, and vValue
-        val upperColor = Scalar(
-            hsvValues[0] + hValue,
-            hsvValues[1] + sValue,
-            hsvValues[2] + vValue
-        )
-
-        val lowerColor = Scalar(
-            hsvValues[0] - hValue,
-            hsvValues[1] - sValue,
-            hsvValues[2] - vValue
-        )
-
-        return Pair(lowerColor, upperColor)
-    }
-
+    private lateinit var mediaPlayer: MediaPlayer
+    private lateinit var mat:Mat
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,13 +52,90 @@ class MainActivity: FlutterActivity() {
 
                 else if (call.method == "calibrateColor"){
                     // Step 3: Create a mask based on the specified color range
-                    val (newLowerColor, newUpperColor) = getHsvRange(matImage, 5, 30, 60)
+                    val (newLowerColor, newUpperColor) = getHsvRange(mat, 5, 30, 60)
                     lowerColor = newLowerColor
                     upperColor = newUpperColor
-                    result.success(listOf(newLowerColor, newUpperColor))
+                    result.success(listOf(newLowerColor.toString(), newUpperColor.toString()))
                 }
             }
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Log.i("MainActivity", "App paused")
+        stopProcessing()  // Add this method to stop any ongoing tasks
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Log.i("MainActivity", "App stopped")
+        stopProcessing()  // Ensure everything stops when the app is stopped
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.i("MainActivity", "App destroyed")
+        stopProcessing()  // Ensure everything is released when the app is destroyed
+    }
+
+    private fun stopProcessing() {
+        // Stop any ongoing image processing, threads, and release resources
+        if (::mat.isInitialized) {
+            mat.release()
+        }
+        mediaPlayer.release()  // Release media player if playing a beep sound
+    }
+
+    private fun getHsvRange(image: Mat, hValue: Int, sValue: Int, vValue: Int): Pair<Scalar, Scalar> {
+
+        // Ensure the image has 3 channels (BGR or HSV)
+        if (image.channels() != 3) {
+            Log.e("OpenCV", "Expected 3-channel image but got ${image.channels()}-channel image")
+            throw IllegalArgumentException("Input image must be a 3-channel BGR image")
+        }
+
+        // Get image dimensions
+        val width = image.width()
+        val height = image.height()
+
+        // Calculate the center coordinates
+        val centerX = width / 2
+        val centerY = height / 2
+
+        // Ensure the center point is valid
+        if (centerX <= 0 || centerY <= 0) {
+            Log.e("OpenCV", "Invalid center point for image dimensions: (${centerX}, ${centerY})")
+            throw IllegalArgumentException("Center coordinates are out of bounds.")
+        }
+
+        // Convert the image to HSV
+        val hsvImage = Mat()
+        Imgproc.cvtColor(image, hsvImage, Imgproc.COLOR_BGR2HSV)
+
+        // Extract the HSV values of the center pixel
+        val centerPixel = hsvImage[centerY, centerX]
+        if (centerPixel == null || centerPixel.size < 3) {
+            Log.e("OpenCV", "Failed to get pixel value at center.")
+            throw IllegalArgumentException("Could not retrieve pixel data at center.")
+        }
+
+        Log.i("OpenCV", "Center pixel HSV values: H=${centerPixel[0]}, S=${centerPixel[1]}, V=${centerPixel[2]}")
+
+        // Create upper and lower color bounds using hValue, sValue, and vValue
+        val upperColor = Scalar(
+            centerPixel[0] + hValue,
+            centerPixel[1] + sValue,
+            centerPixel[2] + vValue
+        )
+
+        val lowerColor = Scalar(
+            if (centerPixel[0] - hValue >= 0) centerPixel[0] - hValue else 0.0,
+            if (centerPixel[1] - sValue >= 0) centerPixel[1] - sValue else 0.0,
+            if (centerPixel[2] - vValue >= 0) centerPixel[2] - vValue else 0.0
+        )
+
+        return Pair(lowerColor, upperColor)
     }
 
 
@@ -94,8 +144,7 @@ class MainActivity: FlutterActivity() {
 
         try {
             // Decode the byte array to a Mat
-            matImage = Imgcodecs.imdecode(MatOfByte(*frameData), Imgcodecs.IMREAD_UNCHANGED)
-            val mat = matImage.clone()
+            mat = Imgcodecs.imdecode(MatOfByte(*frameData), Imgcodecs.IMREAD_UNCHANGED)
 
             if (mat.empty()) {
                 Log.e("OpenCV", "Decoded Mat is empty")
@@ -186,7 +235,7 @@ class MainActivity: FlutterActivity() {
 
     // Function to play the beep sound
     private fun playBeepSound() {
-        val mediaPlayer = MediaPlayer.create(this, R.raw.beep)
+        mediaPlayer = MediaPlayer.create(this, R.raw.beep)
         mediaPlayer.start()
 
         // Specify the type explicitly for the parameter in the lambda
@@ -194,7 +243,4 @@ class MainActivity: FlutterActivity() {
             mp.release() // Release the media player after the sound finishes
         }
     }
-
-
-
 }
