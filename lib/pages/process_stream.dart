@@ -82,18 +82,46 @@ class _ProcessStream extends State<ProcessStream> {
         title: const Text('WebSocket Image Stream'),
       ),
       body: Center(
-        child: ValueListenableBuilder<Uint8List?>(
-          valueListenable: _imageDataNotifier,
-          builder: (context, imageData, child) {
-            if (imageData == null) {
-              return const CircularProgressIndicator();
-            }
-            return Image.memory(
-              imageData,
-              gaplessPlayback: true,
-              fit: BoxFit.cover,
-            );
-          },
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ValueListenableBuilder<Uint8List?>(
+              valueListenable: _imageDataNotifier,
+              builder: (context, imageData, child) {
+                if (imageData == null) {
+                  return const CircularProgressIndicator();
+                }
+                return Image.memory(
+                  imageData,
+                  gaplessPlayback: true,
+                  fit: BoxFit.cover,
+                );
+              },
+            ),
+            const SizedBox(height: 30),
+            // Button is now outside the ValueListenableBuilder, so it won't rebuild unnecessarily
+            ElevatedButton(
+              onPressed: () async {
+                List<dynamic> colorRange =
+                    await platform.invokeMethod('calibrateColor');
+                var lowerColor = colorRange[0];
+                var upperColor = colorRange[1];
+
+                print("Lower Color: $lowerColor");
+                print("Upper Color: $upperColor");
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4.0),
+                ),
+              ),
+              child: const Text(
+                "Calibrate Color",
+                style: TextStyle(fontSize: 12, color: Colors.white),
+              ),
+            ),
+          ],
         ),
       ),
     );

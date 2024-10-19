@@ -21,6 +21,43 @@ import java.io.ByteArrayOutputStream
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "opencv_processing"
+    private var lowerColor = Scalar(30.0, 100.0, 100.0)
+    private var upperColor = Scalar(90.0, 255.0, 255.0)
+    private var matImage = Mat()
+
+
+
+    private fun getHsvRange(image: Mat, hValue: Int, sValue: Int, vValue: Int): Pair<Scalar, Scalar> {
+        val height = image.rows()
+        val width = image.cols()
+
+        // Get the pixel at the center of the image
+        val centerPixel = Mat(1, 1, image.type())
+        Core.extractChannel(image.submat(height / 2, height / 2 + 1, width / 2, width / 2 + 1), centerPixel, 0)
+
+        // Convert the pixel to HSV color space
+        val hsvPixel = Mat(1, 1, image.type())
+        Imgproc.cvtColor(centerPixel, hsvPixel, Imgproc.COLOR_BGR2HSV)
+
+        val hsvValues = hsvPixel.get(0, 0)
+
+        // Create upper and lower color bounds using hValue, sValue, and vValue
+        val upperColor = Scalar(
+            hsvValues[0] + hValue,
+            hsvValues[1] + sValue,
+            hsvValues[2] + vValue
+        )
+
+        val lowerColor = Scalar(
+            hsvValues[0] - hValue,
+            hsvValues[1] - sValue,
+            hsvValues[2] - vValue
+        )
+
+        return Pair(lowerColor, upperColor)
+    }
+
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,10 +76,17 @@ class MainActivity: FlutterActivity() {
                     val processedFrame = processFrameWithOpenCV(byteArray)
                     result.success(processedFrame)
                 }
+
+                else if (call.method == "calibrateColor"){
+                    // Step 3: Create a mask based on the specified color range
+                    val (newLowerColor, newUpperColor) = getHsvRange(matImage, 5, 30, 60)
+                    lowerColor = newLowerColor
+                    upperColor = newUpperColor
+                    result.success(listOf(newLowerColor, newUpperColor))
+                }
             }
         }
     }
-
 
 
     private fun processFrameWithOpenCV(frameData: ByteArray): ByteArray {
@@ -50,7 +94,9 @@ class MainActivity: FlutterActivity() {
 
         try {
             // Decode the byte array to a Mat
-            val mat = Imgcodecs.imdecode(MatOfByte(*frameData), Imgcodecs.IMREAD_UNCHANGED)
+            matImage = Imgcodecs.imdecode(MatOfByte(*frameData), Imgcodecs.IMREAD_UNCHANGED)
+            val mat = matImage.clone()
+
             if (mat.empty()) {
                 Log.e("OpenCV", "Decoded Mat is empty")
                 throw IllegalArgumentException("Failed to decode byte array to Mat")
@@ -64,9 +110,7 @@ class MainActivity: FlutterActivity() {
             val blurredMat = Mat()
             Imgproc.GaussianBlur(hsvMat, blurredMat, org.opencv.core.Size(15.0, 15.0), 0.0)
 
-            // Step 3: Create a mask based on the specified color range
-            val lowerColor = Scalar(30.0, 100.0, 100.0) // Adjust these values as needed
-            val upperColor = Scalar(90.0, 255.0, 255.0) // Adjust these values as needed
+            // Step 3: Mask with the color
             val mask = Mat()
             Core.inRange(blurredMat, lowerColor, upperColor, mask)
 
