@@ -182,25 +182,25 @@ class MainActivity: FlutterActivity() {
             Imgproc.GaussianBlur(sharpenedMat, finalBlurredMat, org.opencv.core.Size(5.0, 5.0), 0.0)
 
             // Step 8: Apply Canny edge detection
-            val edges = Mat()
-            Imgproc.Canny(finalBlurredMat, edges, 100.0, 150.0)
+            val internalEdges = Mat()
+            Imgproc.Canny(finalBlurredMat, internalEdges, 100.0, 150.0)
 
             // Step 9: Find contours
             val contours = mutableListOf<MatOfPoint>()
             val hierarchy = Mat()
-            Imgproc.findContours(edges, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
+            Imgproc.findContours(internalEdges, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
 
             // Step 10: Draw the largest contour
-            if (contours.isNotEmpty()) {
-                val largestContour = contours.maxByOrNull { Imgproc.contourArea(it) }
-                if (largestContour != null) {
-                    Imgproc.drawContours(edges, listOf(largestContour), -1, Scalar(0.0, 0.0, 0.0), 30)
-                }
-            }
+//            if (contours.isNotEmpty()) {
+//                val largestContour = contours.maxByOrNull { Imgproc.contourArea(it) }
+//                if (largestContour != null) {
+//                    Imgproc.drawContours(edges, listOf(largestContour), -1, Scalar(0.0, 0.0, 0.0), 30)
+//                }
+//            }
 
             // Step 11: Internal edge detection
-            val internalEdges = Mat()
-            Imgproc.Canny(edges, internalEdges, 0.0, 150.0)
+//            val internalEdges = Mat()
+//            Imgproc.Canny(edges, internalEdges, 0.0, 150.0)
 
             // Step 12: Annotate the original image if defects are found
             if (Core.countNonZero(internalEdges) > 0) {
