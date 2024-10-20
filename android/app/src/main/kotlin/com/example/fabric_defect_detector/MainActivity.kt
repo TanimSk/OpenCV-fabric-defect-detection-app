@@ -42,10 +42,13 @@ class MainActivity : FlutterActivity() {
 
     private var totalDefect: Int = 0
     private var lastDetectedOn: Int = 0
-//    val eventChannel = EventChannel(flutterEngine?.dartExecutor?.binaryMessenger, EVENT_CHANNEL)
-//    private var eventSink: EventChannel.EventSink? = null
+    private var eventSink: EventChannel.EventSink? = null
 
-
+//    timers
+    private var detectionLastTime: Int = 0
+    private var waitTime: Int = 0
+    private var qcWait: Int = 5000
+    private var defectWait: Int = 5000
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,19 +60,17 @@ class MainActivity : FlutterActivity() {
             Log.d("OpenCV", "OpenCV initialized successfully")
         }
 
-        // Safe to access FlutterEngine here
-//        val flutterEngine = flutterEngine ?: return
-//        setupEventChannel(flutterEngine)
+//        event channel
+        val eventChannel = EventChannel(flutterEngine?.dartExecutor?.binaryMessenger, EVENT_CHANNEL)
+        eventChannel.setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                eventSink = events
+            }
 
-//        eventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-//            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-//                eventSink = events
-//            }
-//
-//            override fun onCancel(arguments: Any?) {
-//                eventSink = null
-//            }
-//        })
+            override fun onCancel(arguments: Any?) {
+                eventSink = null
+            }
+        })
 
 
         flutterEngine?.dartExecutor?.binaryMessenger?.let {
@@ -86,22 +87,19 @@ class MainActivity : FlutterActivity() {
                     Log.i("TOTAL", totalDefect.toString())
                     result.success(totalDefect)
                 }
+                else if(call.method == "setQCWait"){
+                    qcWait = call.arguments as Int
+                    result.success(qcWait)
+                    Log.i("QCWait", qcWait.toString())
+                }
+                else if(call.method == "setDefectWait"){                    
+                    defectWait = call.arguments as Int
+                    result.success(defectWait)
+                    Log.i("DefectWait", defectWait.toString())
+                }                
             }
         }
     }
-
-//    private fun setupEventChannel(flutterEngine: FlutterEngine) {
-//        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "com.example.app/events")
-//            .setStreamHandler(object : EventChannel.StreamHandler {
-//                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-//                    eventSink = events
-//                }
-//
-//                override fun onCancel(arguments: Any?) {
-//                    eventSink = null
-//                }
-//            })
-//    }
 
     override fun onPause() {
         super.onPause()
@@ -142,11 +140,18 @@ class MainActivity : FlutterActivity() {
             if (!startDetection) {
                 return matToByteArray(mat)
             }
+            
+            // pause detection
+            if(System.currentTimeMillis().toInt() - detectionLastTime < waitTime){
+                return matToByteArray(mat)
+            }
+            detectionLastTime = System.currentTimeMillis().toInt()
+            
 
-            // Jora potti
-            val srcRegion = mat.submat(Rect(0, 0, 13, 13))
-            val destRegion = mat.submat(Rect(800, 120, 13, 13))
-            srcRegion.copyTo(destRegion)
+            // crop image
+            val croppingRect = Rect(0, 100, mat.cols(), mat.rows() - 100)
+            mat = Mat(mat, croppingRect)
+
 
             // Convert the image from BGR to HSV
             val hsvImg = Mat()
@@ -163,6 +168,9 @@ class MainActivity : FlutterActivity() {
             // Check if any edges are detected
             val nonZeroPixels = Core.countNonZero(internalEdges)
             if (nonZeroPixels > 0) {
+                // apply pause time
+                waitTime = defectWait
+
                 // Annotate the original image with "Defective"
                 Imgproc.putText(
                     mat,
@@ -192,7 +200,7 @@ class MainActivity : FlutterActivity() {
                 if(System.currentTimeMillis().toInt() - lastDetectedOn > 1000){
                     Log.i("INCREASE","----------------------------------------")
                     totalDefect++
-//                    eventSink?.success(totalDefect) ?: Log.i("Error","EventSink is not available")
+                    eventSink?.success(totalDefect) ?: Log.i("Error","EventSink is not available")
                     Toast.makeText(this, "Defect Detected!", Toast.LENGTH_SHORT).show()
                 }
                 // Update the last detected time
@@ -204,6 +212,9 @@ class MainActivity : FlutterActivity() {
             }
 
             else {
+                // apply pause time
+                waitTime = qcWait
+
                 Imgproc.putText(
                     mat,
                     "QC Passed",

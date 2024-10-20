@@ -29,17 +29,10 @@ class _HomeState extends State<Home> {
   Future<void> _loadSettings() async {
     final settings = await _settingsPreferences.getSettings();
     setState(() {
+      _defectionCount = settings["total_defection_count"];
       _settings = settings;
       _textController.text = _settings["device_ip"] ?? "";
       print(_settings);
-    });
-
-    platform.setMethodCallHandler((call) async {
-      if (call.method == 'defectionCount') {
-        setState(() {
-          _defectionCount = call.arguments as int;
-        });
-      }
     });
   }
 
@@ -75,7 +68,7 @@ class _HomeState extends State<Home> {
                     false,
                   );
                   _settings["device_ip"] = _textController.text;
-                  _settingsPreferences.setSettings(_settings);
+                  await _settingsPreferences.setSettings(_settings);
                   Navigator.pushReplacementNamed(context, '/process_stream');
                 },
                 style: ElevatedButton.styleFrom(
@@ -105,7 +98,7 @@ class _HomeState extends State<Home> {
                   ),
                 ),
                 child: const Text(
-                  "Reset Count",
+                  "    Reset Count    ",
                   style: TextStyle(fontSize: 12, color: Colors.white),
                 ),
               ),

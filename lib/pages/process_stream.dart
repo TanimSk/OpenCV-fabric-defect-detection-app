@@ -23,20 +23,22 @@ class _ProcessStream extends State<ProcessStream> {
 
   // Platform channel to communicate with native code
   static const platform = MethodChannel('opencv_processing');
-  // static const EventChannel _eventChannel =
-  //     EventChannel('com.example.fabric_defect_detector/events');
+  static const EventChannel _eventChannel =
+      EventChannel('com.example.fabric_defect_detector/events');
 
   @override
   void initState() {
     super.initState();
     connectWebSocket();
 
-    // _eventChannel.receiveBroadcastStream().listen((event) {
-    // print("---------- Received event from native: $event ----------");
-    // setState(() {
-    //   _defectionCount = event as int;
-    // });
-    // });
+    _eventChannel.receiveBroadcastStream().listen((event) {
+      print("---------- Received event from native: $event ----------");
+      setState(() async {
+        _defectionCount = event as int;
+        _settings["total_defection_count"] = _defectionCount;
+        await _settingsPreferences.setSettings(_settings);
+      });
+    });
   }
 
   void connectWebSocket() async {
@@ -53,12 +55,12 @@ class _ProcessStream extends State<ProcessStream> {
           processFrame(imageData).then((processedImage) async {
             if (processedImage != null) {
               _imageDataNotifier.value = processedImage;
-              _defectionCount = await platform.invokeMethod('defectionCount');
-              setState(() {
-                _defectionCount = _defectionCount;
-                _settings["total_defection_count"] = _defectionCount;
-                _settingsPreferences.setSettings(_settings);
-              });
+              // setState(() async {
+              // _defectionCount =
+              // await platform.invokeMethod('defectionCount') as int;
+              // _settings["total_defection_count"] = _defectionCount;
+              // _settingsPreferences.setSettings(_settings);
+              // });
             }
           });
         },
@@ -110,6 +112,35 @@ class _ProcessStream extends State<ProcessStream> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Add a horizontal slider
+            Slider(
+              value: _defectionCount.toDouble(),
+              min: 0,
+              max: 25, // Adjust the max value as needed
+              divisions: 25,
+              label: _defectionCount.toString(),
+              onChanged: (double value) async {
+                await platform.invokeMethod(
+                  'setQCWait',
+                  value.toInt(),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+            Slider(
+              value: _defectionCount.toDouble(),
+              min: 0,
+              max: 25, // Adjust the max value as needed
+              divisions: 25,
+              label: _defectionCount.toString(),
+              onChanged: (double value) async {
+                await platform.invokeMethod(
+                  'setDefectWait',
+                  value.toInt(),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
             Text(
               "Defects detected: $_defectionCount",
               style: const TextStyle(fontSize: 18),
