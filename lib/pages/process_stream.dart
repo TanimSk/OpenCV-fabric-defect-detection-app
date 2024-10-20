@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ffi';
 import 'package:fabric_defect_detector/utils/settings_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,8 +18,10 @@ class _ProcessStream extends State<ProcessStream> {
       ValueNotifier<Uint8List?>(null);
   Timer? retryTimer;
   final SettingsPreferences _settingsPreferences = SettingsPreferences();
-  String lowerColor = "Not Calibrated";
-  String upperColor = "Not Calibrated";
+  bool _isDetectionStarted = false;
+
+  // Platform channel to communicate with native code
+  static const platform = MethodChannel('opencv_processing');
 
   @override
   void initState() {
@@ -59,9 +62,6 @@ class _ProcessStream extends State<ProcessStream> {
     }
   }
 
-  // Platform channel to communicate with native code
-  static const platform = MethodChannel('opencv_processing');
-
   // Process frame using OpenCV via platform channels
   Future<Uint8List?> processFrame(Uint8List? frame) async {
     try {
@@ -94,11 +94,6 @@ class _ProcessStream extends State<ProcessStream> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              "Lower Color: $lowerColor\nUpper Color: $upperColor",
-              style: const TextStyle(fontSize: 12),
-            ),
-            const SizedBox(height: 30),
             ValueListenableBuilder<Uint8List?>(
               valueListenable: _imageDataNotifier,
               builder: (context, imageData, child) {
@@ -116,11 +111,13 @@ class _ProcessStream extends State<ProcessStream> {
             // Button is now outside the ValueListenableBuilder, so it won't rebuild unnecessarily
             ElevatedButton(
               onPressed: () async {
-                List<dynamic> colorRange =
-                    await platform.invokeMethod('calibrateColor');
+                _isDetectionStarted = !_isDetectionStarted;
+                bool state = await platform.invokeMethod(
+                  'startDetection',
+                  _isDetectionStarted,
+                );
                 setState(() {
-                  lowerColor = colorRange[0];
-                  upperColor = colorRange[1];
+                  _isDetectionStarted = state;
                 });
               },
               style: ElevatedButton.styleFrom(
@@ -129,9 +126,9 @@ class _ProcessStream extends State<ProcessStream> {
                   borderRadius: BorderRadius.circular(4.0),
                 ),
               ),
-              child: const Text(
-                "Calibrate Color",
-                style: TextStyle(fontSize: 12, color: Colors.white),
+              child: Text(
+                _isDetectionStarted ? "Stop detection" : "Start detection",
+                style: const TextStyle(fontSize: 12, color: Colors.white),
               ),
             ),
           ],

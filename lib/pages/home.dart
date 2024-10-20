@@ -1,6 +1,6 @@
 import 'package:fabric_defect_detector/utils/settings_preferences.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -13,6 +13,8 @@ class _HomeState extends State<Home> {
   late Map<String, dynamic> _settings;
   late TextEditingController _textController;
   late SettingsPreferences _settingsPreferences;
+  // Platform channel to communicate with native code
+  static const platform = MethodChannel('opencv_processing');
 
   @override
   void initState() {
@@ -53,7 +55,11 @@ class _HomeState extends State<Home> {
                   )),
               const SizedBox(height: 60),
               ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
+                  await platform.invokeMethod(
+                    'startDetection',
+                    false,
+                  );
                   _settings["device_ip"] = _textController.text;
                   _settingsPreferences.setSettings(_settings);
                   Navigator.pushReplacementNamed(context, '/process_stream');

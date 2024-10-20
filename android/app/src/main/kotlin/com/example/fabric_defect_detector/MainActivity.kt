@@ -24,14 +24,15 @@ import org.opencv.imgproc.Imgproc
 import java.io.ByteArrayOutputStream
 
 
-class MainActivity: FlutterActivity() {
+class MainActivity : FlutterActivity() {
     private val CHANNEL = "opencv_processing"
     private var lowerColor = Scalar(30.0, 100.0, 100.0)
-    private var upperColor = Scalar( 106.0, 140.0, 171.0)
-    private var isCalibrated: Boolean = false
+    private var upperColor = Scalar(106.0, 140.0, 171.0)
+//    private var isCalibrated: Boolean = false
+    private var startDetection: Boolean = false
+    private var audioFinishedPlaying: Boolean = true
     private lateinit var mediaPlayer: MediaPlayer
-    private lateinit var mat:Mat
-
+    private lateinit var mat: Mat
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,14 +51,9 @@ class MainActivity: FlutterActivity() {
                     val byteArray = call.arguments as ByteArray
                     val processedFrame = processFrameWithOpenCV(byteArray)
                     result.success(processedFrame)
-                }
-
-                else if (call.method == "calibrateColor"){
-                    // Step 3: Create a mask based on the specified color range
-                    val (newLowerColor, newUpperColor) = getHsvRange(mat, 5, 30, 60)
-                    lowerColor = newLowerColor
-                    upperColor = newUpperColor
-                    result.success(listOf(newLowerColor.toString(), newUpperColor.toString()))
+                } else if (call.method == "startDetection") {
+                    startDetection = call.arguments as Boolean
+                    result.success(startDetection)
                 }
             }
         }
@@ -89,58 +85,6 @@ class MainActivity: FlutterActivity() {
         mediaPlayer.release()  // Release media player if playing a beep sound
     }
 
-    private fun getHsvRange(image: Mat, hValue: Int, sValue: Int, vValue: Int): Pair<Scalar, Scalar> {
-
-        // Ensure the image has 3 channels (BGR or HSV)
-        if (image.channels() != 3) {
-            Log.e("OpenCV", "Expected 3-channel image but got ${image.channels()}-channel image")
-            throw IllegalArgumentException("Input image must be a 3-channel BGR image")
-        }
-
-        // Get image dimensions
-        val width = image.width()
-        val height = image.height()
-
-        // Calculate the center coordinates
-        val centerX = width / 2
-        val centerY = height / 2
-
-        // Ensure the center point is valid
-        if (centerX <= 0 || centerY <= 0) {
-            Log.e("OpenCV", "Invalid center point for image dimensions: (${centerX}, ${centerY})")
-            throw IllegalArgumentException("Center coordinates are out of bounds.")
-        }
-
-        // Convert the image to HSV
-        val hsvImage = Mat()
-        Imgproc.cvtColor(image, hsvImage, Imgproc.COLOR_BGR2HSV)
-
-        // Extract the HSV values of the center pixel
-        val centerPixel = hsvImage[centerY, centerX]
-        if (centerPixel == null || centerPixel.size < 3) {
-            Log.e("OpenCV", "Failed to get pixel value at center.")
-            throw IllegalArgumentException("Could not retrieve pixel data at center.")
-        }
-
-        Log.i("OpenCV", "Center pixel HSV values: H=${centerPixel[0]}, S=${centerPixel[1]}, V=${centerPixel[2]}")
-
-        // Create upper and lower color bounds using hValue, sValue, and vValue
-        val upperColor = Scalar(
-            centerPixel[0] + hValue,
-            centerPixel[1] + sValue,
-            centerPixel[2] + vValue
-        )
-
-        val lowerColor = Scalar(
-            if (centerPixel[0] - hValue >= 0) centerPixel[0] - hValue else 0.0,
-            if (centerPixel[1] - sValue >= 0) centerPixel[1] - sValue else 0.0,
-            if (centerPixel[2] - vValue >= 0) centerPixel[2] - vValue else 0.0
-        )
-
-        isCalibrated = true
-        return Pair(lowerColor, upperColor)
-    }
-
     private fun processFrameWithOpenCV(frameData: ByteArray): ByteArray {
         Log.d("OpenCV", "Received frame data length: ${frameData.size}")
 
@@ -153,77 +97,39 @@ class MainActivity: FlutterActivity() {
                 throw IllegalArgumentException("Failed to decode byte array to Mat")
             }
 
-            if (!isCalibrated){
+            if (!startDetection) {
                 return matToByteArray(mat)
             }
 
-            // Step 1: Convert the image to HSV
-            val hsvMat = Mat()
-            Imgproc.cvtColor(mat, hsvMat, Imgproc.COLOR_BGR2HSV)
+            // Convert the image from BGR to HSV
+            val hsvImg = Mat()
+            Imgproc.cvtColor(mat, hsvImg, Imgproc.COLOR_BGR2HSV)
 
-            // Step 2: Blur the image
-            val blurredMat = Mat()
-            Imgproc.GaussianBlur(hsvMat, blurredMat, org.opencv.core.Size(15.0, 15.0), 0.0)
-
-            // Step 3: Mask with the color
+            // Apply bilateral filter
             val mask = Mat()
-            Core.inRange(blurredMat, lowerColor, upperColor, mask)
+            Imgproc.bilateralFilter(hsvImg, mask, 70, 15.0, 15.0)
 
-            // Step 4: Bitwise AND the mask with the original image
-            val maskedMat = Mat()
-            Core.bitwise_and(mat, mat, maskedMat, mask)
-
-            // Step 5: Convert the image to grayscale
-            val grayMat = Mat()
-            Imgproc.cvtColor(maskedMat, grayMat, Imgproc.COLOR_BGR2GRAY)
-
-            // Step 6: Sharpen the image
-            val kernel = Mat(3, 3, CvType.CV_32F)
-            kernel.put(0, 0, 0.0, -1.0, 0.0, -1.0, 6.0, -1.0, 0.0, -1.0, 0.0)
-            val sharpenedMat = Mat()
-            Imgproc.filter2D(grayMat, sharpenedMat, -1, kernel)
-
-            // Step 7: Apply Gaussian blur
-            val finalBlurredMat = Mat()
-            Imgproc.GaussianBlur(sharpenedMat, finalBlurredMat, org.opencv.core.Size(5.0, 5.0), 0.0)
-
-            // Step 8: Apply Canny edge detection
-            val edges = Mat()
-            Imgproc.Canny(finalBlurredMat, edges, 100.0, 150.0)
-
-            // Step 9: Find contours
-            val contours = mutableListOf<MatOfPoint>()
-            val hierarchy = Mat()
-            Imgproc.findContours(edges, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
-
-            // Step 10: Draw the largest contour
-//            if (contours.isNotEmpty()) {
-//                val largestContour = contours.maxByOrNull { Imgproc.contourArea(it) }
-//                if (largestContour != null) {
-//                    Imgproc.drawContours(edges, listOf(largestContour), -1, Scalar(0.0, 0.0, 0.0), 30)
-//                }
-//            }
-
-            // Step 11: Internal edge detection
+            // Apply Canny edge detection
             val internalEdges = Mat()
-            Imgproc.Canny(edges, internalEdges, 0.0, 150.0)
+            Imgproc.Canny(mask, internalEdges, 100.0, 150.0)
 
-            // Step 12: Annotate the original image if defects are found
-            if (Core.countNonZero(internalEdges) > 0) {
-                // Play a beep sound if defect is found
-                playBeepSound()
+            // Check if any edges are detected
+            val nonZeroPixels = Core.countNonZero(internalEdges)
+            if (nonZeroPixels > 0) {
+                // Annotate the original image with "Defective"
+                Imgproc.putText(
+                    mat, "Defective", Point(30.0, 40.0), Imgproc.FONT_HERSHEY_SIMPLEX, 1.0, Scalar(0.0, 0.0, 255.0), 2
+                )
 
-                // Draw "Defective" text on the original image
-                Imgproc.putText(mat, "Defective", Point(30.0, 40.0), Imgproc.FONT_HERSHEY_SIMPLEX, 1.0, Scalar(0.0, 0.0, 255.0), 2)
+                // Find contours of the internal edges to draw a boundary
+                val defectContours = ArrayList<MatOfPoint>()
+                val hierarchy = Mat()
+                Imgproc.findContours(
+                    internalEdges, defectContours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE
+                )
 
-                // Find contours of the internal edges
-                val defectContours = mutableListOf<MatOfPoint>()
-                Imgproc.findContours(internalEdges, defectContours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
-
-                // Draw the defect contours on the original image
-                for (contour in defectContours) {
-                    Imgproc.drawContours(mat, listOf(contour), -1, Scalar(0.0, 255.0, 0.0), 2)
-                }
+                // Draw the contours on the original image in green
+                Imgproc.drawContours(mat, defectContours, -1, Scalar(0.0, 255.0, 0.0), 2)
             }
 
             return matToByteArray(mat)
@@ -234,7 +140,7 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    fun matToByteArray(mat: Mat): ByteArray {
+    private fun matToByteArray(mat: Mat): ByteArray {
         // Create a Bitmap from the Mat
         val processedBitmap = Bitmap.createBitmap(mat.cols(), mat.rows(), Bitmap.Config.ARGB_8888)
 
@@ -254,11 +160,13 @@ class MainActivity: FlutterActivity() {
 
     // Function to play the beep sound
     private fun playBeepSound() {
+        audioFinishedPlaying = false
         mediaPlayer = MediaPlayer.create(this, R.raw.beep)
         mediaPlayer.start()
 
         // Specify the type explicitly for the parameter in the lambda
         mediaPlayer.setOnCompletionListener { mp: MediaPlayer ->
+            audioFinishedPlaying = true
             mp.release() // Release the media player after the sound finishes
         }
     }
