@@ -16,33 +16,49 @@ class _ProcessStream extends State<ProcessStream> {
   final ValueNotifier<Uint8List?> _imageDataNotifier =
       ValueNotifier<Uint8List?>(null);
   Timer? retryTimer;
+  late Map<String, dynamic> _settings;
   final SettingsPreferences _settingsPreferences = SettingsPreferences();
   bool _isDetectionStarted = false;
+  int _defectionCount = 0;
 
   // Platform channel to communicate with native code
   static const platform = MethodChannel('opencv_processing');
+  // static const EventChannel _eventChannel =
+  //     EventChannel('com.example.fabric_defect_detector/events');
 
   @override
   void initState() {
     super.initState();
     connectWebSocket();
+
+    // _eventChannel.receiveBroadcastStream().listen((event) {
+    // print("---------- Received event from native: $event ----------");
+    // setState(() {
+    //   _defectionCount = event as int;
+    // });
+    // });
   }
 
   void connectWebSocket() async {
     try {
-      Map<String, dynamic> settings = await _settingsPreferences.getSettings();
+      _settings = await _settingsPreferences.getSettings();
       _channel = WebSocketChannel.connect(
-        Uri.parse('ws://${settings["device_ip"]}'),
+        Uri.parse('ws://${_settings["device_ip"]}'),
       );
       _channel.stream.listen(
         (data) {
           // Assuming image bytes received
           Uint8List imageData = data as Uint8List;
           // Process the image using OpenCV
-          processFrame(imageData).then((processedImage) {
+          processFrame(imageData).then((processedImage) async {
             if (processedImage != null) {
-              _imageDataNotifier.value =
-                  processedImage; // Update the notifier value
+              _imageDataNotifier.value = processedImage;
+              _defectionCount = await platform.invokeMethod('defectionCount');
+              setState(() {
+                _defectionCount = _defectionCount;
+                _settings["total_defection_count"] = _defectionCount;
+                _settingsPreferences.setSettings(_settings);
+              });
             }
           });
         },
@@ -94,6 +110,11 @@ class _ProcessStream extends State<ProcessStream> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            Text(
+              "Defects detected: $_defectionCount",
+              style: const TextStyle(fontSize: 18),
+            ),
+            const SizedBox(height: 30),
             ValueListenableBuilder<Uint8List?>(
               valueListenable: _imageDataNotifier,
               builder: (context, imageData, child) {

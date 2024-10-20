@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SettingsPreferences {
   Map<String, dynamic> defaultSettings = {
     "device_ip": "0.0.0.0:0000", // "192.168.1.103:5500"
+    "total_defection_count": 0,
   };
 
   Future<Map<String, dynamic>> getSettings() async {

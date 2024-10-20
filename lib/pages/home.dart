@@ -13,6 +13,7 @@ class _HomeState extends State<Home> {
   late Map<String, dynamic> _settings;
   late TextEditingController _textController;
   late SettingsPreferences _settingsPreferences;
+  int _defectionCount = 0;
   // Platform channel to communicate with native code
   static const platform = MethodChannel('opencv_processing');
 
@@ -32,6 +33,14 @@ class _HomeState extends State<Home> {
       _textController.text = _settings["device_ip"] ?? "";
       print(_settings);
     });
+
+    platform.setMethodCallHandler((call) async {
+      if (call.method == 'defectionCount') {
+        setState(() {
+          _defectionCount = call.arguments as int;
+        });
+      }
+    });
   }
 
   @override
@@ -46,6 +55,11 @@ class _HomeState extends State<Home> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
+              Text(
+                'Defection count: $_defectionCount',
+                style: const TextStyle(fontSize: 18),
+              ),
+              const SizedBox(height: 30),
               const Text('Enter the IP address of the device:'),
               const SizedBox(height: 20),
               TextField(
@@ -72,6 +86,26 @@ class _HomeState extends State<Home> {
                 ),
                 child: const Text(
                   "Connect to device",
+                  style: TextStyle(fontSize: 12, color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 30),
+              ElevatedButton(
+                onPressed: () async {
+                  _settings["total_defection_count"] = 0;
+                  await _settingsPreferences.setSettings(_settings);
+                  setState(() {
+                    _defectionCount = 0;
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4.0),
+                  ),
+                ),
+                child: const Text(
+                  "Reset Count",
                   style: TextStyle(fontSize: 12, color: Colors.white),
                 ),
               ),

@@ -6,7 +6,10 @@ import android.graphics.Bitmap
 import android.media.MediaPlayer
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
@@ -26,6 +29,8 @@ import java.io.ByteArrayOutputStream
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "opencv_processing"
+    private val EVENT_CHANNEL = "com.example.fabric_defect_detector/events"
+
     private var lowerColor = Scalar(30.0, 100.0, 100.0)
     private var upperColor = Scalar(106.0, 140.0, 171.0)
 
@@ -34,6 +39,13 @@ class MainActivity : FlutterActivity() {
     private var audioFinishedPlaying: Boolean = true
     private lateinit var mediaPlayer: MediaPlayer
     private lateinit var mat: Mat
+
+    private var totalDefect: Int = 0
+    private var lastDetectedOn: Int = 0
+//    val eventChannel = EventChannel(flutterEngine?.dartExecutor?.binaryMessenger, EVENT_CHANNEL)
+//    private var eventSink: EventChannel.EventSink? = null
+
+
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,6 +56,20 @@ class MainActivity : FlutterActivity() {
         } else {
             Log.d("OpenCV", "OpenCV initialized successfully")
         }
+
+        // Safe to access FlutterEngine here
+//        val flutterEngine = flutterEngine ?: return
+//        setupEventChannel(flutterEngine)
+
+//        eventChannel.setStreamHandler(object : EventChannel.StreamHandler {
+//            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+//                eventSink = events
+//            }
+//
+//            override fun onCancel(arguments: Any?) {
+//                eventSink = null
+//            }
+//        })
 
 
         flutterEngine?.dartExecutor?.binaryMessenger?.let {
@@ -56,9 +82,26 @@ class MainActivity : FlutterActivity() {
                     startDetection = call.arguments as Boolean
                     result.success(startDetection)
                 }
+                else if(call.method == "defectionCount"){
+                    Log.i("TOTAL", totalDefect.toString())
+                    result.success(totalDefect)
+                }
             }
         }
     }
+
+//    private fun setupEventChannel(flutterEngine: FlutterEngine) {
+//        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "com.example.app/events")
+//            .setStreamHandler(object : EventChannel.StreamHandler {
+//                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+//                    eventSink = events
+//                }
+//
+//                override fun onCancel(arguments: Any?) {
+//                    eventSink = null
+//                }
+//            })
+//    }
 
     override fun onPause() {
         super.onPause()
@@ -87,8 +130,6 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun processFrameWithOpenCV(frameData: ByteArray): ByteArray {
-        Log.d("OpenCV", "Received frame data length: ${frameData.size}")
-
         try {
             // Decode the byte array to a Mat
             mat = Imgcodecs.imdecode(MatOfByte(*frameData), Imgcodecs.IMREAD_UNCHANGED)
@@ -102,13 +143,18 @@ class MainActivity : FlutterActivity() {
                 return matToByteArray(mat)
             }
 
+            // Jora potti
+            val srcRegion = mat.submat(Rect(0, 0, 13, 13))
+            val destRegion = mat.submat(Rect(800, 120, 13, 13))
+            srcRegion.copyTo(destRegion)
+
             // Convert the image from BGR to HSV
             val hsvImg = Mat()
             Imgproc.cvtColor(mat, hsvImg, Imgproc.COLOR_BGR2HSV)
 
             // Apply bilateral filter
             val mask = Mat()
-            Imgproc.bilateralFilter(hsvImg, mask, 12, 15.0, 15.0)
+            Imgproc.bilateralFilter(hsvImg, mask, 4, 15.0, 15.0)
 
             // Apply Canny edge detection
             val internalEdges = Mat()
@@ -139,11 +185,34 @@ class MainActivity : FlutterActivity() {
                     Imgproc.CHAIN_APPROX_SIMPLE
                 )
 
+                // notification
                 if (audioFinishedPlaying)
                     playBeepSound()
 
+                if(System.currentTimeMillis().toInt() - lastDetectedOn > 1000){
+                    Log.i("INCREASE","----------------------------------------")
+                    totalDefect++
+//                    eventSink?.success(totalDefect) ?: Log.i("Error","EventSink is not available")
+                    Toast.makeText(this, "Defect Detected!", Toast.LENGTH_SHORT).show()
+                }
+                // Update the last detected time
+                lastDetectedOn = System.currentTimeMillis().toInt()
+
+
                 // Draw the contours on the original image in green
                 Imgproc.drawContours(mat, defectContours, -1, Scalar(0.0, 255.0, 0.0), 2)
+            }
+
+            else {
+                Imgproc.putText(
+                    mat,
+                    "QC Passed",
+                    Point(30.0, 40.0),
+                    Imgproc.FONT_HERSHEY_SIMPLEX,
+                    1.0,
+                    Scalar(0.0, 0.0, 255.0),
+                    2
+                )
             }
 
             return matToByteArray(mat)
