@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ffi';
 import 'package:fabric_defect_detector/utils/settings_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -85,6 +84,7 @@ class _ProcessStream extends State<ProcessStream> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
+            _channel.sink.close();
             Navigator.pushReplacementNamed(
                 context, '/home'); // Navigate back when the button is pressed
           },

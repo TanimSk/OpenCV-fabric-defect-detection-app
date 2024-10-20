@@ -28,7 +28,8 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "opencv_processing"
     private var lowerColor = Scalar(30.0, 100.0, 100.0)
     private var upperColor = Scalar(106.0, 140.0, 171.0)
-//    private var isCalibrated: Boolean = false
+
+    //    private var isCalibrated: Boolean = false
     private var startDetection: Boolean = false
     private var audioFinishedPlaying: Boolean = true
     private lateinit var mediaPlayer: MediaPlayer
@@ -107,7 +108,7 @@ class MainActivity : FlutterActivity() {
 
             // Apply bilateral filter
             val mask = Mat()
-            Imgproc.bilateralFilter(hsvImg, mask, 70, 15.0, 15.0)
+            Imgproc.bilateralFilter(hsvImg, mask, 12, 15.0, 15.0)
 
             // Apply Canny edge detection
             val internalEdges = Mat()
@@ -118,15 +119,28 @@ class MainActivity : FlutterActivity() {
             if (nonZeroPixels > 0) {
                 // Annotate the original image with "Defective"
                 Imgproc.putText(
-                    mat, "Defective", Point(30.0, 40.0), Imgproc.FONT_HERSHEY_SIMPLEX, 1.0, Scalar(0.0, 0.0, 255.0), 2
+                    mat,
+                    "Defective",
+                    Point(30.0, 40.0),
+                    Imgproc.FONT_HERSHEY_SIMPLEX,
+                    1.0,
+                    Scalar(0.0, 0.0, 255.0),
+                    2
                 )
 
                 // Find contours of the internal edges to draw a boundary
                 val defectContours = ArrayList<MatOfPoint>()
                 val hierarchy = Mat()
                 Imgproc.findContours(
-                    internalEdges, defectContours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE
+                    internalEdges,
+                    defectContours,
+                    hierarchy,
+                    Imgproc.RETR_EXTERNAL,
+                    Imgproc.CHAIN_APPROX_SIMPLE
                 )
+
+                if (audioFinishedPlaying)
+                    playBeepSound()
 
                 // Draw the contours on the original image in green
                 Imgproc.drawContours(mat, defectContours, -1, Scalar(0.0, 255.0, 0.0), 2)
