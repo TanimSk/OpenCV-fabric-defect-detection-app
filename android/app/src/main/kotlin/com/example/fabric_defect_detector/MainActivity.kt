@@ -36,19 +36,23 @@ class MainActivity : FlutterActivity() {
 
     //    private var isCalibrated: Boolean = false
     private var startDetection: Boolean = false
-    private var audioFinishedPlaying: Boolean = true
+    private var warningAudioFinishedPlaying: Boolean = true
+    private var successAudioFinishedPlaying: Boolean = true
     private lateinit var mediaPlayer: MediaPlayer
     private lateinit var mat: Mat
 
     private var totalDefect: Int = 0
-    private var lastDetectedOn: Int = 0
+    private var lastDetectedOn: Long = 0
     private var eventSink: EventChannel.EventSink? = null
+    private var lastDefectionType: String = ""
+    private var newDefectionType: String = ""
 
-//    timers
-    private var detectionLastTime: Int = 0
-    private var waitTime: Int = 0
-    private var qcWait: Int = 5000
-    private var defectWait: Int = 5000
+    //    timers
+    private var detectionLastTime: Long = 0
+    private var waitTime: Long = 0
+    private var qcWait: Long = 5000
+    private var defectWait: Long = 5000
+    private var continueTime: Long = 2000
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,21 +86,24 @@ class MainActivity : FlutterActivity() {
                 } else if (call.method == "startDetection") {
                     startDetection = call.arguments as Boolean
                     result.success(startDetection)
-                }
-                else if(call.method == "defectionCount"){
+                } else if (call.method == "defectionCount") {
                     Log.i("TOTAL", totalDefect.toString())
                     result.success(totalDefect)
-                }
-                else if(call.method == "setQCWait"){
-                    qcWait = call.arguments as Int
+                } else if (call.method == "setDefectionCount") {
+                    totalDefect = call.arguments as Int
+                    Log.i("TOTAL", totalDefect.toString())
+                    result.success(totalDefect)
+                } else if (call.method == "setQCWait") {
+                    qcWait = (call.arguments as Int).toLong()
                     result.success(qcWait)
+                    qcWait *= 1000
                     Log.i("QCWait", qcWait.toString())
-                }
-                else if(call.method == "setDefectWait"){                    
-                    defectWait = call.arguments as Int
+                } else if (call.method == "setDefectWait") {
+                    defectWait = (call.arguments as Int).toLong()
                     result.success(defectWait)
+                    defectWait *= 1000
                     Log.i("DefectWait", defectWait.toString())
-                }                
+                }
             }
         }
     }
@@ -140,16 +147,20 @@ class MainActivity : FlutterActivity() {
             if (!startDetection) {
                 return matToByteArray(mat)
             }
-            
+
+            val timeCompare: Long = waitTime - (System.currentTimeMillis() - detectionLastTime)
             // pause detection
-            if(System.currentTimeMillis().toInt() - detectionLastTime < waitTime){
-                return matToByteArray(mat)
-            }
-            detectionLastTime = System.currentTimeMillis().toInt()
-            
+//            if (timeCompare > 0) {
+//                return matToByteArray(mat)
+//            }
+
+            Log.i("COMPARE", timeCompare.toString())
+            Log.i("NICHE", "Aije ...")
+            detectionLastTime = System.currentTimeMillis()
+
 
             // crop image
-            val croppingRect = Rect(0, 100, mat.cols(), mat.rows() - 100)
+            val croppingRect = Rect(0, 130, mat.cols(), mat.rows() - 130)
             mat = Mat(mat, croppingRect)
 
 
@@ -168,8 +179,8 @@ class MainActivity : FlutterActivity() {
             // Check if any edges are detected
             val nonZeroPixels = Core.countNonZero(internalEdges)
             if (nonZeroPixels > 0) {
-                // apply pause time
-                waitTime = defectWait
+                // apply pause time after 2sec
+//                if (timeCompare < -continueTime) waitTime = defectWait
 
                 // Annotate the original image with "Defective"
                 Imgproc.putText(
@@ -194,26 +205,34 @@ class MainActivity : FlutterActivity() {
                 )
 
                 // notification
-                if (audioFinishedPlaying)
-                    playBeepSound()
+                if (warningAudioFinishedPlaying)
+                    playWarningBeepSound()
 
-                if(System.currentTimeMillis().toInt() - lastDetectedOn > 1000){
-                    Log.i("INCREASE","----------------------------------------")
+                if (System.currentTimeMillis() - lastDetectedOn > 1000) {
+                    Log.i("INCREASE", "----------------------------------------")
                     totalDefect++
-                    eventSink?.success(totalDefect) ?: Log.i("Error","EventSink is not available")
+                    eventSink?.success(
+                        listOf(
+                            totalDefect,
+                            lastDefectionType
+                        )
+                    ) ?: Log.i("Error", "EventSink is not available")
                     Toast.makeText(this, "Defect Detected!", Toast.LENGTH_SHORT).show()
                 }
                 // Update the last detected time
-                lastDetectedOn = System.currentTimeMillis().toInt()
-
+                lastDetectedOn = System.currentTimeMillis()
 
                 // Draw the contours on the original image in green
+                newDefectionType = "Defective"
                 Imgproc.drawContours(mat, defectContours, -1, Scalar(0.0, 255.0, 0.0), 2)
-            }
 
-            else {
-                // apply pause time
-                waitTime = qcWait
+            } else {
+                // apply pause time after 2sec
+//                if (timeCompare < -continueTime) waitTime = qcWait
+
+                if (successAudioFinishedPlaying) playSuccessBeepSound()
+
+                newDefectionType = "QC Passed"
 
                 Imgproc.putText(
                     mat,
@@ -224,6 +243,16 @@ class MainActivity : FlutterActivity() {
                     Scalar(0.0, 0.0, 255.0),
                     2
                 )
+            }
+
+            if (lastDefectionType != newDefectionType) {
+                lastDefectionType = newDefectionType
+                eventSink?.success(
+                    listOf(
+                        totalDefect,
+                        lastDefectionType
+                    )
+                ) ?: Log.i("Error", "EventSink is not available")
             }
 
             return matToByteArray(mat)
@@ -253,14 +282,26 @@ class MainActivity : FlutterActivity() {
 
 
     // Function to play the beep sound
-    private fun playBeepSound() {
-        audioFinishedPlaying = false
-        mediaPlayer = MediaPlayer.create(this, R.raw.beep)
+    private fun playWarningBeepSound() {
+        warningAudioFinishedPlaying = false
+        mediaPlayer = MediaPlayer.create(this, R.raw.defect)
         mediaPlayer.start()
 
         // Specify the type explicitly for the parameter in the lambda
         mediaPlayer.setOnCompletionListener { mp: MediaPlayer ->
-            audioFinishedPlaying = true
+            warningAudioFinishedPlaying = true
+            mp.release() // Release the media player after the sound finishes
+        }
+    }
+
+    private fun playSuccessBeepSound() {
+        successAudioFinishedPlaying = false
+        mediaPlayer = MediaPlayer.create(this, R.raw.success)
+        mediaPlayer.start()
+
+        // Specify the type explicitly for the parameter in the lambda
+        mediaPlayer.setOnCompletionListener { mp: MediaPlayer ->
+            successAudioFinishedPlaying = true
             mp.release() // Release the media player after the sound finishes
         }
     }

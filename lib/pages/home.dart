@@ -50,7 +50,7 @@ class _HomeState extends State<Home> {
             children: <Widget>[
               Text(
                 'Defection count: $_defectionCount',
-                style: const TextStyle(fontSize: 18),
+                style: const TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 30),
               const Text('Enter the IP address of the device:'),
@@ -69,6 +69,11 @@ class _HomeState extends State<Home> {
                   );
                   _settings["device_ip"] = _textController.text;
                   await _settingsPreferences.setSettings(_settings);
+                  // set the defection count
+                  await platform.invokeMethod(
+                    'setDefectionCount',
+                    _defectionCount,
+                  );
                   Navigator.pushReplacementNamed(context, '/process_stream');
                 },
                 style: ElevatedButton.styleFrom(

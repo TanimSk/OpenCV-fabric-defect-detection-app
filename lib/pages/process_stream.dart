@@ -20,6 +20,9 @@ class _ProcessStream extends State<ProcessStream> {
   final SettingsPreferences _settingsPreferences = SettingsPreferences();
   bool _isDetectionStarted = false;
   int _defectionCount = 0;
+  String _defectType = "";
+  int _qcWait = 5;
+  int _defectWait = 5;
 
   // Platform channel to communicate with native code
   static const platform = MethodChannel('opencv_processing');
@@ -30,14 +33,24 @@ class _ProcessStream extends State<ProcessStream> {
   void initState() {
     super.initState();
     connectWebSocket();
+    initCount();
 
-    _eventChannel.receiveBroadcastStream().listen((event) {
+    _eventChannel.receiveBroadcastStream().listen((event) async {
       print("---------- Received event from native: $event ----------");
-      setState(() async {
-        _defectionCount = event as int;
-        _settings["total_defection_count"] = _defectionCount;
-        await _settingsPreferences.setSettings(_settings);
+      _settings["total_defection_count"] = _defectionCount;
+      await _settingsPreferences.setSettings(_settings);
+      setState(() {
+        List<dynamic> data = event as List<dynamic>;
+        _defectionCount = data[0] as int;
+        _defectType = data[1] as String;
       });
+    });
+  }
+
+  void initCount() async {
+    _defectionCount = await platform.invokeMethod('defectionCount') as int;
+    setState(() {
+      _defectionCount = _defectionCount;
     });
   }
 
@@ -113,37 +126,53 @@ class _ProcessStream extends State<ProcessStream> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Add a horizontal slider
-            Slider(
-              value: _defectionCount.toDouble(),
-              min: 0,
-              max: 25, // Adjust the max value as needed
-              divisions: 25,
-              label: _defectionCount.toString(),
-              onChanged: (double value) async {
-                await platform.invokeMethod(
-                  'setQCWait',
-                  value.toInt(),
-                );
-              },
+            // Text(
+            //   "Wait time after QC: $_qcWait",
+            //   style: const TextStyle(fontSize: 16),
+            // ),
+            // const SizedBox(height: 5),
+            // Slider(
+            //   value: _qcWait.toDouble(),
+            //   min: 0,
+            //   max: 25, // Adjust the max value as needed
+            //   divisions: 25,
+            //   label: _qcWait.toString(),
+            //   onChanged: (double value) async {
+            //     setState(() {
+            //       _qcWait = value.toInt();
+            //     });
+            //     await platform.invokeMethod(
+            //       'setQCWait',
+            //       value.toInt(),
+            //     );
+            //   },
+            // ),
+            // const SizedBox(height: 10),
+            Text(
+              _defectType,
+              style: const TextStyle(fontSize: 22),
             ),
             const SizedBox(height: 10),
-            Slider(
-              value: _defectionCount.toDouble(),
-              min: 0,
-              max: 25, // Adjust the max value as needed
-              divisions: 25,
-              label: _defectionCount.toString(),
-              onChanged: (double value) async {
-                await platform.invokeMethod(
-                  'setDefectWait',
-                  value.toInt(),
-                );
-              },
-            ),
-            const SizedBox(height: 10),
+            // Slider(
+            //   value: _defectWait.toDouble(),
+            //   min: 0,
+            //   max: 25, // Adjust the max value as needed
+            //   divisions: 25,
+            //   label: _defectWait.toString(),
+            //   onChanged: (double value) async {
+            //     setState(() {
+            //       _defectWait = value.toInt();
+            //     });
+            //     await platform.invokeMethod(
+            //       'setDefectWait',
+            //       value.toInt(),
+            //     );
+            //   },
+            // ),
+            // const SizedBox(height: 10),
             Text(
               "Defects detected: $_defectionCount",
-              style: const TextStyle(fontSize: 18),
+              style: const TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 30),
             ValueListenableBuilder<Uint8List?>(
