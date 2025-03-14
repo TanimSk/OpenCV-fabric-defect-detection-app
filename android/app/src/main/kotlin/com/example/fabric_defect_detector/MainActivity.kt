@@ -292,7 +292,7 @@ class MainActivity : FlutterActivity() {
         currentDefectStatusString = defectStatusString.toString()
         if (currentDefectStatusString != latestDefectStatusString) {
             // count total defects
-            totalDefects = defectStatus.values.sum()
+            totalDefects += defectStatus.values.sum()
             // send array [statusString, totalDefects]
             eventSink?.success(listOf(currentDefectStatusString, totalDefects))
             latestDefectStatusString = currentDefectStatusString

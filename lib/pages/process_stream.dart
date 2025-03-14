@@ -119,7 +119,11 @@ class _ProcessStream extends State<ProcessStream> {
               builder: (context, imageData, child) {
                 return imageData == null
                     ? const CircularProgressIndicator()
-                    : Image.memory(imageData);
+                    : Image.memory(
+                        imageData,
+                        gaplessPlayback: true,
+                        fit: BoxFit.cover,
+                      );
               },
             ),
             const SizedBox(height: 10),
