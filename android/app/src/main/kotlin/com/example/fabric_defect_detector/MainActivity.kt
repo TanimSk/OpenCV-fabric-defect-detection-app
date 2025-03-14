@@ -3,6 +3,7 @@ package com.example.fabric_defect_detector
 import android.os.Bundle
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
@@ -24,8 +25,11 @@ import org.tensorflow.lite.gpu.CompatibilityList
 import org.tensorflow.lite.gpu.GpuDelegate
 
 class MainActivity : FlutterActivity() {
+    private val CHANNEL: String = "opencv_processing"
+    private val EVENT_CHANNEL: String = "com.example.fabric_defect_detector/events"
+    private var eventSink: EventChannel.EventSink? = null
+
     private lateinit var mat: Mat
-    private val CHANNEL = "opencv_processing"
     private val labels = listOf("ripped", "stain")
     private lateinit var processedFrame: ByteArray
     private lateinit var interpreter: Interpreter
@@ -33,8 +37,9 @@ class MainActivity : FlutterActivity() {
     private lateinit var outputShape: IntArray
     private var tfInitialized = false
 
-    private var frameCount: Int = 0
-    private val FRAME_SKIP: Int = 3
+    private var latestDefectStatusString: String = "Stain: 0 Ripped: 0"
+    private var currentDefectStatusString: String = "Stain: 0 Ripped: 0"
+    private var totalDefects: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,15 +50,7 @@ class MainActivity : FlutterActivity() {
             Log.d("OpenCV", "OpenCV initialized successfully")
         }
 
-        // val options = Interpreter.Options().apply { setUseNNAPI(true) }
-        // val options =
-        //         Interpreter.Options().apply {
-        //             setUseNNAPI(false) // Ensure NNAPI is off if using XNNPACK
-        //             setNumThreads(4) // Use multi-threading
-        //             setUseXNNPACK(true) // Enable XNNPACK for optimization
-        //         }
         val compatList = CompatibilityList()
-
         val options =
                 Interpreter.Options().apply {
                     if (compatList.isDelegateSupportedOnThisDevice) {
@@ -67,14 +64,25 @@ class MainActivity : FlutterActivity() {
                 }
         interpreter = Interpreter(loadModelFile("model.tflite"), options)
 
+        // event channel
+        val eventChannel = EventChannel(flutterEngine?.dartExecutor?.binaryMessenger, EVENT_CHANNEL)
+        eventChannel.setStreamHandler(
+                object : EventChannel.StreamHandler {
+                    override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                        eventSink = events
+                    }
+
+                    override fun onCancel(arguments: Any?) {
+                        eventSink = null
+                    }
+                }
+        )
+
         flutterEngine?.dartExecutor?.binaryMessenger?.let {
             MethodChannel(it, CHANNEL).setMethodCallHandler { call, result ->
                 if (call.method == "processFrame") {
                     val byteArray = call.arguments as ByteArray
-                    if (frameCount % FRAME_SKIP == 0) {
-                        processedFrame = processFrameWithOpenCV(byteArray)
-                    }
-                    frameCount++
+                    processedFrame = processFrameWithOpenCV(byteArray)
                     result.success(processedFrame)
                 }
             }
@@ -245,6 +253,9 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun getAnnotateImage(image: Mat, boxes: ArrayList<Array<Float>>): ByteArray {
+        // a map like {"ripped": 0, "stain": 0}
+        val defectStatus = mutableMapOf("ripped" to 0, "stain" to 0)
+
         for (box in boxes) {
             val xMin = box[0].toInt()
             val yMin = box[1].toInt()
@@ -252,6 +263,8 @@ class MainActivity : FlutterActivity() {
             val yMax = box[3].toInt()
             val classId = box[4].toInt()
             val confidence = box[5]
+
+            defectStatus[labels[classId]] = defectStatus[labels[classId]]!! + 1
 
             Imgproc.rectangle(
                     image,
@@ -271,29 +284,45 @@ class MainActivity : FlutterActivity() {
             )
         }
 
+        // form the string to be sent to the flutter app, by looping over the labels
+        val defectStatusString = StringBuilder()
+        for (label in labels) {
+            defectStatusString.append("$label: ${defectStatus[label]} ")
+        }
+        currentDefectStatusString = defectStatusString.toString()
+        if (currentDefectStatusString != latestDefectStatusString) {
+            // count total defects
+            totalDefects = defectStatus.values.sum()
+            // send array [statusString, totalDefects]
+            eventSink?.success(listOf(currentDefectStatusString, totalDefects))
+            latestDefectStatusString = currentDefectStatusString
+        }
+
         return matToByteArray(image)
     }
 
     private fun matToByteArray(mat: Mat): ByteArray {
-        // Create a Bitmap from the Mat
-        // val processedBitmap = Bitmap.createBitmap(mat.cols(), mat.rows(),
-        // Bitmap.Config.ARGB_8888)
-
-        // // Convert the Mat to Bitmap
-        // Utils.matToBitmap(mat, processedBitmap)
-
-        // // Prepare an output stream to hold the compressed image data
-        // val stream = ByteArrayOutputStream()
-
-        // // Compress the Bitmap to JPEG format with 100% quality
-        // // processedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
-        // Imgcodecs.imencode(".jpg", mat, buffer)
-
-        // // Return the byte array from the stream
-        // return stream.toByteArray()
         val buffer = MatOfByte()
         Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2RGB)
         Imgcodecs.imencode(".jpg", mat, buffer)
         return buffer.toArray()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        interpreter.close()
+
+        if (eventSink != null) {
+            eventSink?.endOfStream()
+            eventSink = null
+        }
+
+        if (::mat.isInitialized) {
+            mat.release()
+        }
+
+        if (::processedFrame.isInitialized) {
+            processedFrame = ByteArray(0)
+        }
     }
 }

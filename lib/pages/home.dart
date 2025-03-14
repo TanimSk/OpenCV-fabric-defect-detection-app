@@ -86,27 +86,7 @@ class _HomeState extends State<Home> {
                   "Connect to device",
                   style: TextStyle(fontSize: 12, color: Colors.white),
                 ),
-              ),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: () async {
-                  _settings["total_defection_count"] = 0;
-                  await _settingsPreferences.setSettings(_settings);
-                  setState(() {
-                    // _defectionCount = 0;
-                  });
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4.0),
-                  ),
-                ),
-                child: const Text(
-                  "    Reset Count    ",
-                  style: TextStyle(fontSize: 12, color: Colors.white),
-                ),
-              ),
+              ),                          
             ],
           ),
         ),
