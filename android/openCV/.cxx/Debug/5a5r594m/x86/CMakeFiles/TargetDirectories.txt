@@ -1,0 +1,3 @@
+/Users/ghost/Programming/FlutterDev/fabric_defect_detector/android/openCV/.cxx/Debug/5a5r594m/x86/CMakeFiles/opencv_jni_shared.dir
+/Users/ghost/Programming/FlutterDev/fabric_defect_detector/android/openCV/.cxx/Debug/5a5r594m/x86/CMakeFiles/edit_cache.dir
+/Users/ghost/Programming/FlutterDev/fabric_defect_detector/android/openCV/.cxx/Debug/5a5r594m/x86/CMakeFiles/rebuild_cache.dir
