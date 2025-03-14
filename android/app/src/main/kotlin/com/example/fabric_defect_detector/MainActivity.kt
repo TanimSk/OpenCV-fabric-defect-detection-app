@@ -1,18 +1,15 @@
 package com.example.fabric_defect_detector
 
-import android.graphics.Bitmap
 import android.os.Bundle
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.Array
 import org.opencv.android.OpenCVLoader
-import org.opencv.android.Utils
 import org.opencv.core.CvType
 import org.opencv.core.CvType.CV_32F
 import org.opencv.core.Mat
@@ -23,6 +20,8 @@ import org.opencv.core.Size
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.gpu.CompatibilityList
+import org.tensorflow.lite.gpu.GpuDelegate
 
 class MainActivity : FlutterActivity() {
     private lateinit var mat: Mat
@@ -46,7 +45,26 @@ class MainActivity : FlutterActivity() {
             Log.d("OpenCV", "OpenCV initialized successfully")
         }
 
-        val options = Interpreter.Options().apply { setUseNNAPI(true) }
+        // val options = Interpreter.Options().apply { setUseNNAPI(true) }
+        // val options =
+        //         Interpreter.Options().apply {
+        //             setUseNNAPI(false) // Ensure NNAPI is off if using XNNPACK
+        //             setNumThreads(4) // Use multi-threading
+        //             setUseXNNPACK(true) // Enable XNNPACK for optimization
+        //         }
+        val compatList = CompatibilityList()
+
+        val options =
+                Interpreter.Options().apply {
+                    if (compatList.isDelegateSupportedOnThisDevice) {
+                        // if the device has a supported GPU, add the GPU delegate
+                        val delegateOptions = compatList.bestOptionsForThisDevice
+                        this.addDelegate(GpuDelegate(delegateOptions))
+                    } else {
+                        // if the GPU is not supported, run on 4 threads
+                        this.setNumThreads(4)
+                    }
+                }
         interpreter = Interpreter(loadModelFile("model.tflite"), options)
 
         flutterEngine?.dartExecutor?.binaryMessenger?.let {
@@ -108,7 +126,8 @@ class MainActivity : FlutterActivity() {
         Log.d("Input", preprocessedImage.size.toString())
         val outputData = runInference(preprocessedImage) // Extract batch 0
         Log.d("Output", outputData.size.toString())
-        val boxes = postprocessOutput(outputData[0], mat)
+        var boxes = postprocessOutput(outputData[0], mat)
+        boxes = nms(boxes, 0.5f)
         Log.d("Boxes", boxes.size.toString())
         return getAnnotateImage(mat, boxes)
     }
@@ -193,6 +212,38 @@ class MainActivity : FlutterActivity() {
         return boxes
     }
 
+    private fun iou(box1: Array<Float>, box2: Array<Float>): Float {
+        val xMin = maxOf(box1[0], box2[0])
+        val yMin = maxOf(box1[1], box2[1])
+        val xMax = minOf(box1[2], box2[2])
+        val yMax = minOf(box1[3], box2[3])
+
+        val intersection = maxOf(0f, xMax - xMin) * maxOf(0f, yMax - yMin)
+        val area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        val area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+
+        return intersection / (area1 + area2 - intersection)
+    }
+
+    private fun nms(boxes: ArrayList<Array<Float>>, iouThreshold: Float): ArrayList<Array<Float>> {
+        if (boxes.isEmpty()) return arrayListOf()
+
+        // Sort boxes by confidence score in descending order
+        val sortedBoxes = boxes.sortedByDescending { it[5] }.toMutableList()
+
+        val selectedBoxes = arrayListOf<Array<Float>>()
+
+        while (sortedBoxes.isNotEmpty()) {
+            val chosenBox = sortedBoxes.removeAt(0)
+            selectedBoxes.add(chosenBox)
+
+            // Remove boxes with high IoU
+            sortedBoxes.removeAll { iou(chosenBox, it) > iouThreshold }
+        }
+
+        return selectedBoxes
+    }
+
     private fun getAnnotateImage(image: Mat, boxes: ArrayList<Array<Float>>): ByteArray {
         for (box in boxes) {
             val xMin = box[0].toInt()
@@ -225,18 +276,24 @@ class MainActivity : FlutterActivity() {
 
     private fun matToByteArray(mat: Mat): ByteArray {
         // Create a Bitmap from the Mat
-        val processedBitmap = Bitmap.createBitmap(mat.cols(), mat.rows(), Bitmap.Config.ARGB_8888)
+        // val processedBitmap = Bitmap.createBitmap(mat.cols(), mat.rows(),
+        // Bitmap.Config.ARGB_8888)
 
-        // Convert the Mat to Bitmap
-        Utils.matToBitmap(mat, processedBitmap)
+        // // Convert the Mat to Bitmap
+        // Utils.matToBitmap(mat, processedBitmap)
 
-        // Prepare an output stream to hold the compressed image data
-        val stream = ByteArrayOutputStream()
+        // // Prepare an output stream to hold the compressed image data
+        // val stream = ByteArrayOutputStream()
 
-        // Compress the Bitmap to JPEG format with 100% quality
-        processedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+        // // Compress the Bitmap to JPEG format with 100% quality
+        // // processedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+        // Imgcodecs.imencode(".jpg", mat, buffer)
 
-        // Return the byte array from the stream
-        return stream.toByteArray()
+        // // Return the byte array from the stream
+        // return stream.toByteArray()
+        val buffer = MatOfByte()
+        Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2RGB)
+        Imgcodecs.imencode(".jpg", mat, buffer)
+        return buffer.toArray()
     }
 }
