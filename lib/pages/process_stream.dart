@@ -19,12 +19,13 @@ class _ProcessStream extends State<ProcessStream> {
       ValueNotifier<Uint8List?>(null);
 
   // show on display
-  List<dynamic> data = ["", 0];
+  List<dynamic> data = ["", ""];
   String defectStatus = "";
-  int totalDefectionCount = 0;
+  String totalDefectStatus = "";
 
   // skip frame
-  final int skipFrame = 5;
+  final int skipFrame =
+      1; // Skip 5 frame, process 6th frame, skip 5 frame, process 6th frame, and so on
   int frameCount = 0;
 
   // Communicate with Kotlin via platform channels
@@ -41,8 +42,8 @@ class _ProcessStream extends State<ProcessStream> {
       await _settingsPreferences.setSettings(_settings);
       setState(() {
         data = event as List<dynamic>;
-        defectStatus = data[0];
-        totalDefectionCount = data[1];
+        defectStatus = data[0].toString();
+        totalDefectStatus = data[1].toString();
       });
     });
   }
@@ -52,19 +53,35 @@ class _ProcessStream extends State<ProcessStream> {
       _settings = await _settingsPreferences.getSettings();
       _channel = WebSocketChannel.connect(Uri.parse(
           'ws://${_settings["device_ip"]}')); // Change to your WebSocket URL
+
+      DateTime? lastReceivedTime;
+
       _channel.stream.listen(
         (data) async {
+          DateTime currentTime = DateTime.now();
+
+          if (lastReceivedTime != null) {
+            Duration timeDifference = currentTime.difference(lastReceivedTime!);
+            print(
+                'Time since last data received: ${timeDifference.inMilliseconds} ms');
+          }
+
+          lastReceivedTime = currentTime;
+
           // Assuming image bytes received
           Uint8List imageData = data as Uint8List;
-          // Process the image from kotlin
-          if (frameCount % skipFrame == 0) {
+
+          // Process the image from Kotlin
+          if (frameCount < skipFrame) {
+            frameCount++;
+          } else {
             await processFrame(imageData).then((processedImage) async {
               if (processedImage != null) {
                 _imageDataNotifier.value = processedImage;
               }
             });
+            frameCount = 0;
           }
-          frameCount++;
         },
         onError: (error) => print('WebSocket error: $error'),
         onDone: () => print('WebSocket connection closed'),
@@ -86,9 +103,9 @@ class _ProcessStream extends State<ProcessStream> {
 
   @override
   void dispose() {
-    _channel.sink.close();    
+    _channel.sink.close();
     _eventChannel.receiveBroadcastStream().listen(null);
-    // _imageDataNotifier.dispose();    
+    // _imageDataNotifier.dispose();
     super.dispose();
   }
 
@@ -111,7 +128,8 @@ class _ProcessStream extends State<ProcessStream> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              defectStatus,
+              "Current\n$defectStatus",
+              textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 20),
             ),
             const SizedBox(height: 10),
@@ -129,7 +147,8 @@ class _ProcessStream extends State<ProcessStream> {
             ),
             const SizedBox(height: 10),
             Text(
-              'Total Defects: $totalDefectionCount',
+              "Total\n$totalDefectStatus",
+              textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 20),
             ),
           ],

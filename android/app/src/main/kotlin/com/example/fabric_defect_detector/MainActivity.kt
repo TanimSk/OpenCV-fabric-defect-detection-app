@@ -20,8 +20,7 @@ import org.opencv.core.Size
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import org.tensorflow.lite.Interpreter
-
-// import org.tensorflow.lite.gpu.CompatibilityList
+import org.tensorflow.lite.gpu.CompatibilityList
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL: String = "opencv_processing"
@@ -38,7 +37,10 @@ class MainActivity : FlutterActivity() {
 
     private var latestDefectStatusString: String = "Stain: 0 Ripped: 0"
     private var currentDefectStatusString: String = "Stain: 0 Ripped: 0"
-    private var totalDefects: Int = 0
+
+    // total defects detected
+    private var totalDefectStatus = mutableMapOf("ripped" to 0, "stain" to 0)
+    private var totalDefectStatusString: String = "Stain: 0 Ripped: 0"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,7 +51,7 @@ class MainActivity : FlutterActivity() {
             Log.d("OpenCV", "OpenCV initialized successfully")
         }
 
-        // val compatList = CompatibilityList()
+        val compatList = CompatibilityList()
         // val options =
         //         Interpreter.Options().apply {
         //             if (compatList.isDelegateSupportedOnThisDevice) {
@@ -63,9 +65,24 @@ class MainActivity : FlutterActivity() {
         //                 Log.d("GPU", "GPU delegate not added")
         //             }
         //         }
+
+        // val options =
+        //         Interpreter.Options().apply {
+        //             numThreads = Runtime.getRuntime().availableProcessors()
+        //         }
+
+        // nnapi delegate
         val options =
                 Interpreter.Options().apply {
-                    numThreads = Runtime.getRuntime().availableProcessors()
+                    if (compatList.isDelegateSupportedOnThisDevice) {
+                        // if the device has a supported NNAPI, add the NNAPI delegate
+                        this.setUseNNAPI(true)
+                        Log.d("NNAPI", "NNAPI delegate added")
+                    } else {
+                        // if the NNAPI is not supported, run on available threads
+                        this.setNumThreads(Runtime.getRuntime().availableProcessors())
+                        Log.d("NNAPI", "NNAPI delegate not added")
+                    }
                 }
         interpreter = Interpreter(loadModelFile("model.tflite"), options)
 
@@ -134,15 +151,21 @@ class MainActivity : FlutterActivity() {
             throw IllegalArgumentException("Failed to decode byte array to Mat")
         }
 
+        val startTime = System.nanoTime()
+
         Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2RGB)
         val preprocessedImage = preprocessImage(mat, inputShape)
-        Log.d("Input", preprocessedImage.size.toString())
         val outputData = runInference(preprocessedImage) // Extract batch 0
-        Log.d("Output", outputData.size.toString())
         var boxes = postprocessOutput(outputData[0], mat)
         boxes = nms(boxes, 0.5f)
-        Log.d("Boxes", boxes.size.toString())
-        return getAnnotateImage(mat, boxes)
+        val annotatedImage = getAnnotateImage(mat, boxes)
+
+        val endTime = System.nanoTime()
+        val elapsedTimeMs =
+                (endTime - startTime) / 1_000_000.0 // Convert nanoseconds to milliseconds
+        Log.d("FrameProcessing", "Time taken per frame: $elapsedTimeMs ms")
+
+        return annotatedImage
     }
 
     private fun preprocessImage(
@@ -162,9 +185,9 @@ class MainActivity : FlutterActivity() {
         resizedImage.convertTo(resizedImage, CvType.CV_32F, 1.0 / 255.0)
 
         // Convert Mat to a 4D array (1, 640, 640, 3)
-        val height = resizedImage.rows()
-        val width = resizedImage.cols()
-        val channels = resizedImage.channels()
+        val height = 640
+        val width = 640
+        val channels = 3
 
         // Convert Mat to a float array
         val floatArray = FloatArray(height * width * channels)
@@ -184,6 +207,7 @@ class MainActivity : FlutterActivity() {
         return outputArray
     }
 
+    // returns [1, 6, 8400]
     private fun runInference(
             inputImage: Array<Array<Array<FloatArray>>>
     ): Array<Array<FloatArray>> {
@@ -198,8 +222,8 @@ class MainActivity : FlutterActivity() {
             outputData: Array<FloatArray>,
             image: Mat
     ): ArrayList<Array<Float>> {
-        val imageHeight = image.rows()
-        val imageWidth = image.cols()
+        val imageHeight: Int = 480
+        val imageWidth: Int = 640
         val boxes = ArrayList<Array<Float>>()
         // val detections = outputData[0]
         val xCenters = outputData[0]
@@ -297,9 +321,17 @@ class MainActivity : FlutterActivity() {
         currentDefectStatusString = defectStatusString.toString()
         if (currentDefectStatusString != latestDefectStatusString) {
             // count total defects
-            totalDefects += defectStatus.values.sum()
+            for (label in labels) {
+                totalDefectStatus[label] = totalDefectStatus[label]!! + defectStatus[label]!!
+            }
+            // form the string to be sent to the flutter app, by looping over the labels
+            val totalDefectStatusString = StringBuilder()
+            for (label in labels) {
+                totalDefectStatusString.append("$label: ${totalDefectStatus[label]} ")
+            }
+
             // send array [statusString, totalDefects]
-            eventSink?.success(listOf(currentDefectStatusString, totalDefects))
+            eventSink?.success(listOf(currentDefectStatusString, totalDefectStatusString))
             latestDefectStatusString = currentDefectStatusString
         }
 
@@ -308,7 +340,7 @@ class MainActivity : FlutterActivity() {
 
     private fun matToByteArray(mat: Mat): ByteArray {
         val buffer = MatOfByte()
-        Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2RGB)
+        // Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2RGB)
         Imgcodecs.imencode(".jpg", mat, buffer)
         return buffer.toArray()
     }
