@@ -86,8 +86,9 @@ class _ProcessStream extends State<ProcessStream> {
 
   @override
   void dispose() {
-    _channel.sink.close();
+    _channel.sink.close();    
     _eventChannel.receiveBroadcastStream().listen(null);
+    // _imageDataNotifier.dispose();    
     super.dispose();
   }
 

@@ -12,7 +12,6 @@ import java.nio.ByteOrder
 import kotlin.Array
 import org.opencv.android.OpenCVLoader
 import org.opencv.core.CvType
-import org.opencv.core.CvType.CV_32F
 import org.opencv.core.Mat
 import org.opencv.core.MatOfByte
 import org.opencv.core.Rect
@@ -21,8 +20,8 @@ import org.opencv.core.Size
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import org.tensorflow.lite.Interpreter
-import org.tensorflow.lite.gpu.CompatibilityList
-import org.tensorflow.lite.gpu.GpuDelegate
+
+// import org.tensorflow.lite.gpu.CompatibilityList
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL: String = "opencv_processing"
@@ -50,17 +49,23 @@ class MainActivity : FlutterActivity() {
             Log.d("OpenCV", "OpenCV initialized successfully")
         }
 
-        val compatList = CompatibilityList()
+        // val compatList = CompatibilityList()
+        // val options =
+        //         Interpreter.Options().apply {
+        //             if (compatList.isDelegateSupportedOnThisDevice) {
+        //                 // if the device has a supported GPU, add the GPU delegate
+        //                 val delegateOptions = compatList.bestOptionsForThisDevice
+        //                 this.addDelegate(GpuDelegate(delegateOptions))
+        //                 Log.d("GPU", "GPU delegate added")
+        //             } else {
+        //                 // if the GPU is not supported, run on 4 threads
+        //                 this.setNumThreads(4)
+        //                 Log.d("GPU", "GPU delegate not added")
+        //             }
+        //         }
         val options =
                 Interpreter.Options().apply {
-                    if (compatList.isDelegateSupportedOnThisDevice) {
-                        // if the device has a supported GPU, add the GPU delegate
-                        val delegateOptions = compatList.bestOptionsForThisDevice
-                        this.addDelegate(GpuDelegate(delegateOptions))
-                    } else {
-                        // if the GPU is not supported, run on 4 threads
-                        this.setNumThreads(4)
-                    }
+                    numThreads = Runtime.getRuntime().availableProcessors()
                 }
         interpreter = Interpreter(loadModelFile("model.tflite"), options)
 

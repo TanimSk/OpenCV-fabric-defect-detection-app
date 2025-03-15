@@ -1,0 +1,46 @@
+# macOS system files
+.DS_Store
+
+# Android build and temporary files
+.cxx/
+build/
+
+# JNI and compiled libraries
+native/libs/
+native/staticlibs/
+native/3rdparty/libs/
+
+# Gradle files
+.gradle/
+build.gradle
+gradlew
+gradlew.bat
+gradle/
+
+# Java generated files
+java/javadoc/
+java/res/
+
+# Ignore intermediate object files
+*.o
+*.so
+*.a
+*.lo
+*.la
+
+# CMake and build files
+CMakeLists.txt.user
+cmake-build-*/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+*.swn
+
+# Ignore OpenCV intermediate build files
+libcxx_helper/
+native/jni/abi-*/
+native/jni/OpenCV*.mk
+native/jni/OpenCVConfig*.cmake

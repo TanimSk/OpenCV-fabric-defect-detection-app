@@ -1,1 +1,0 @@
-/Users/ghost/Programming/FlutterDev/fabric_defect_detector/build/openCV/intermediates/cxx/Debug/5a5r594m/obj/x86
