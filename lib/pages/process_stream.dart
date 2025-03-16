@@ -22,11 +22,7 @@ class _ProcessStream extends State<ProcessStream> {
   List<dynamic> data = ["", ""];
   String defectStatus = "";
   String totalDefectStatus = "";
-
-  // skip frame
-  final int skipFrame =
-      1; // Skip 5 frame, process 6th frame, skip 5 frame, process 6th frame, and so on
-  int frameCount = 0;
+  bool readyToReceiveFrame = true;
 
   // Communicate with Kotlin via platform channels
   static const platform = MethodChannel('opencv_processing');
@@ -72,15 +68,14 @@ class _ProcessStream extends State<ProcessStream> {
           Uint8List imageData = data as Uint8List;
 
           // Process the image from Kotlin
-          if (frameCount < skipFrame) {
-            frameCount++;
-          } else {
+          if (readyToReceiveFrame) {
+            readyToReceiveFrame = false;
             await processFrame(imageData).then((processedImage) async {
               if (processedImage != null) {
                 _imageDataNotifier.value = processedImage;
+                readyToReceiveFrame = true;
               }
             });
-            frameCount = 0;
           }
         },
         onError: (error) => print('WebSocket error: $error'),
