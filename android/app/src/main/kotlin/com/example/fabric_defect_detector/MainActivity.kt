@@ -2,11 +2,9 @@ package com.example.fabric_defect_detector
 
 import android.os.Bundle
 import android.util.Log
-import android.graphics.SurfaceTexture
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
-import io.flutter.view.TextureRegistry
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -23,7 +21,6 @@ import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
-
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL: String = "opencv_processing"
@@ -45,11 +42,6 @@ class MainActivity : FlutterActivity() {
     private var totalDefectStatus = mutableMapOf("ripped" to 0, "stain" to 0)
     private var totalDefectStatusString: String = "Stain: 0 Ripped: 0"
 
-    // flutter texture
-    private lateinit var textureEntry: TextureRegistry.SurfaceTextureEntry
-    private lateinit var surfaceTexture: SurfaceTexture
-    private var textureId: Long = 0L
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -60,6 +52,25 @@ class MainActivity : FlutterActivity() {
         }
 
         val compatList = CompatibilityList()
+        // val options =
+        //         Interpreter.Options().apply {
+        //             if (compatList.isDelegateSupportedOnThisDevice) {
+        //                 // if the device has a supported GPU, add the GPU delegate
+        //                 val delegateOptions = compatList.bestOptionsForThisDevice
+        //                 this.addDelegate(GpuDelegate(delegateOptions))
+        //                 Log.d("GPU", "GPU delegate added")
+        //             } else {
+        //                 // if the GPU is not supported, run on 4 threads
+        //                 this.setNumThreads(4)
+        //                 Log.d("GPU", "GPU delegate not added")
+        //             }
+        //         }
+
+        // val options =
+        //         Interpreter.Options().apply {
+        //             numThreads = Runtime.getRuntime().availableProcessors()
+        //         }
+
         // nnapi delegate
         val options =
                 Interpreter.Options().apply {
@@ -75,34 +86,26 @@ class MainActivity : FlutterActivity() {
                 }
         interpreter = Interpreter(loadModelFile("model.tflite"), options)
 
-
-        // flutter texture
-        val textureRegistry = flutterEngine?.renderer?.textureRegistry
-        textureEntry = textureRegistry.createSurfaceTexture()
-        surfaceTexture = textureEntry.surfaceTexture()
-        textureId = textureEntry.id()
-
-
         // event channel
         val eventChannel = EventChannel(flutterEngine?.dartExecutor?.binaryMessenger, EVENT_CHANNEL)
-        eventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-                eventSink = events
-            }
+        eventChannel.setStreamHandler(
+                object : EventChannel.StreamHandler {
+                    override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                        eventSink = events
+                    }
 
-            override fun onCancel(arguments: Any?) {
-                eventSink = null
-            }
-        })
+                    override fun onCancel(arguments: Any?) {
+                        eventSink = null
+                    }
+                }
+        )
 
         flutterEngine?.dartExecutor?.binaryMessenger?.let {
             MethodChannel(it, CHANNEL).setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "processFrame" -> {
-                        val byteArray = call.arguments as ByteArray
-                        processedFrame = processFrameWithOpenCV(byteArray)
-                        result.success(textureId)
-                    }
+                if (call.method == "processFrame") {
+                    val byteArray = call.arguments as ByteArray
+                    processedFrame = processFrameWithOpenCV(byteArray)
+                    result.success(processedFrame)
                 }
             }
         }
@@ -162,8 +165,6 @@ class MainActivity : FlutterActivity() {
                 (endTime - startTime) / 1_000_000.0 // Convert nanoseconds to milliseconds
         Log.d("FrameProcessing", "Time taken per frame: $elapsedTimeMs ms")
 
-        // Send processed frame to texture
-        surfaceTexture.updateTexImage()
         return annotatedImage
     }
 
@@ -185,7 +186,7 @@ class MainActivity : FlutterActivity() {
 
         // Convert Mat to a 4D array (1, 640, 640, 3)
         val height = 640
-        val width = 640
+        val width = 480
         val channels = 3
 
         // Convert Mat to a float array
